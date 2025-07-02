@@ -3,14 +3,12 @@ package taskmanager
 import (
 	"errors"
 	"time"
-	"sort"
 )
 
 // Predefined errors
 var (
 	ErrTaskNotFound = errors.New("task not found")
 	ErrEmptyTitle   = errors.New("title cannot be empty")
-	ErrInvalidID = errors.New("invalid task ID")
 )
 
 // Task represents a single task
@@ -41,10 +39,10 @@ func NewTaskManager() *TaskManager {
 func (tm *TaskManager) AddTask(title, description string) (Task, error) {
 	// TODO: Implement this function
 	if title == "" {
-		return nil, ErrEmptyTitle
+		return Task{}, ErrEmptyTitle
 	}
 
-	task := &Task{
+	task := Task{
 		ID:          tm.nextID,
 		Title:       title,
 		Description: description,
@@ -52,18 +50,15 @@ func (tm *TaskManager) AddTask(title, description string) (Task, error) {
 		CreatedAt:   time.Now(),
 	}
 
-	tm.tasks[task.ID] = task
+	tm.tasks[tm.nextID] = task
 	tm.nextID++
+
 	return task, nil
 }
 
 // UpdateTask updates an existing task, returns an error if the title is empty or the task is not found
 func (tm *TaskManager) UpdateTask(id int, title, description string, done bool) error {
 	// TODO: Implement this function
-	if id <= 0 {
-		return ErrInvalidID
-	}
-
 	if title == "" {
 		return ErrEmptyTitle
 	}
@@ -76,17 +71,16 @@ func (tm *TaskManager) UpdateTask(id int, title, description string, done bool) 
 	task.Title = title
 	task.Description = description
 	task.Done = done
+	tm.tasks[id] = task
+
 	return nil
 }
 
 // DeleteTask removes a task from the manager, returns an error if the task is not found
 func (tm *TaskManager) DeleteTask(id int) error {
 	// TODO: Implement this function
-	if id <= 0 {
-		return ErrInvalidID
-	}
-
-	if _, exists := tm.tasks[id]; !exists {
+	_, exists := tm.tasks[id]
+	if !exists {
 		return ErrTaskNotFound
 	}
 
@@ -97,14 +91,9 @@ func (tm *TaskManager) DeleteTask(id int) error {
 // GetTask retrieves a task by ID, returns an error if the task is not found
 func (tm *TaskManager) GetTask(id int) (Task, error) {
 	// TODO: Implement this function
-	if id <= 0 {
-		return nil, ErrInvalidID
-	}
-
 	task, exists := tm.tasks[id]
-
 	if !exists {
-		return nil, ErrTaskNotFound
+		return Task{}, ErrTaskNotFound
 	}
 
 	return task, nil
@@ -113,17 +102,23 @@ func (tm *TaskManager) GetTask(id int) (Task, error) {
 // ListTasks returns all tasks, optionally filtered by done status, returns an empty slice if no tasks are found
 func (tm *TaskManager) ListTasks(filterDone *bool) []Task {
 	// TODO: Implement this function
-	tasks := make([]*Task, 0, len(tm.tasks))
+	var tasks []Task
 
-	for _, task := range tm.tasks {
-		if filterDone == nil || task.Done == *filterDone {
+	if filterDone == nil {
+		// Return all tasks if no filter is specified
+		tasks = make([]Task, 0, len(tm.tasks))
+		for _, task := range tm.tasks {
 			tasks = append(tasks, task)
 		}
+	} else {
+		// Filter tasks based on done status
+		tasks = make([]Task, 0)
+		for _, task := range tm.tasks {
+			if task.Done == *filterDone {
+				tasks = append(tasks, task)
+			}
+		}
 	}
-
-	sort.Slice(tasks, func(i, j int) bool {
-		return tasks[i].ID < tasks[j].ID
-	})
 
 	return tasks
 }
