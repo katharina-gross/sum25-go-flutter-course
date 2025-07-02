@@ -30,7 +30,7 @@ type TaskManager struct {
 func NewTaskManager() *TaskManager {
 	// TODO: Implement this function
 	return &TaskManager{
-		tasks:  make(map[int]*Task),
+		tasks:  make(map[int]Task),
 		nextID: 1,
 	}
 }
