@@ -25,14 +25,16 @@ class _UserProfileState extends State<UserProfile> {
       _isLoading = true;
       _error = null;
     });
-    
+
     try {
       final user = await widget.userService.fetchUser();
       setState(() => _userData = user);
     } catch (e) {
       setState(() => _error = 'An error occurred');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -48,18 +50,18 @@ class _UserProfileState extends State<UserProfile> {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     if (_error != null) {
-      return Center(child: Text('Error: $_error'));
+      return Center(child: Text(_error!));
     }
-    
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('Name: ${_userData!['name']}'),
+          Text(_userData!['name']!),
           const SizedBox(height: 10),
-          Text('Email: ${_userData!['email']}'),
+          Text(_userData!['email']!),
         ],
       ),
     );
