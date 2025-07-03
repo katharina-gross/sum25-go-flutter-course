@@ -28,7 +28,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _isLoading = true;
       _error = null;
     });
-    
+
     try {
       await widget.chatService.connect();
       _subscription = widget.chatService.messageStream.listen((message) {
@@ -55,7 +55,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _sendMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
-    
+
     try {
       _textController.clear();
       await widget.chatService.sendMessage(text);
@@ -83,11 +83,11 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     if (_error != null) {
       return Center(child: Text('Error: $_error'));
     }
-    
+
     return ListView.builder(
       itemCount: _messages.length,
       itemBuilder: (context, index) => ListTile(
