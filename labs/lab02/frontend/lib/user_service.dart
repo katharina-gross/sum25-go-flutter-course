@@ -5,8 +5,8 @@ class UserService {
 
     // Return simulated user data
     return {
-      'name': 'Default User',
-      'email': 'user@example.com'
+      'name': 'Alice',
+      'email': 'alice@example.com',
       };
   }
 }
