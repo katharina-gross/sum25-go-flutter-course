@@ -5,16 +5,14 @@ import 'chat_service.dart';
 import 'user_service.dart';
 
 void main() {
-  // TODO: Initialize and run the app
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  MyApp({Key? key}) : super(key: key);
-
-  // TODO: Initialize chatService and userService
   final ChatService chatService = ChatService();
   final UserService userService = UserService();
+
+  MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +32,6 @@ class MyApp extends StatelessWidget {
           ),
           body: TabBarView(
             children: [
-              // TODO: Implement ChatScreen and UserProfile
               ChatScreen(chatService: chatService),
               UserProfile(userService: userService),
             ],
