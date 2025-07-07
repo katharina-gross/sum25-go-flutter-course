@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"io"
+	"lab03-backend/models"
 	"lab03-backend/storage"
 	"log"
 	"net/http"
@@ -11,243 +13,219 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// APIResponse standard response structure
-type APIResponse struct {
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
-}
-
-// HTTPStatusResponse structure for GetHTTPStatus
-type HTTPStatusResponse struct {
-	StatusCode  int    `json:"status_code"`
-	ImageURL    string `json:"image_url"`
-	Description string `json:"description"`
-}
-
-// HealthResponse structure for HealthCheck
-type HealthResponse struct {
-	Status        string    `json:"status"`
-	Message       string    `json:"message"`
-	Timestamp     time.Time `json:"timestamp"`
-	TotalMessages int       `json:"total_messages"`
-}
-
-// CreateMessageRequest structure for CreateMessage
-type CreateMessageRequest struct {
-	Content string `json:"content"`
-}
-
-// UpdateMessageRequest structure for UpdateMessage
-type UpdateMessageRequest struct {
-	Content string `json:"content"`
-}
-
-// Handler holds the storage instance
 type Handler struct {
 	storage *storage.MemoryStorage
 }
 
-// NewHandler creates a new handler instance
 func NewHandler(storage *storage.MemoryStorage) *Handler {
 	return &Handler{storage: storage}
 }
 
-// SetupRoutes configures all API routes
 func (h *Handler) SetupRoutes() *mux.Router {
 	router := mux.NewRouter()
 	router.Use(corsMiddleware)
+	api := router.PathPrefix("/api").Subrouter()
 
-	apiRouter := router.PathPrefix("/api").Subrouter()
-	apiRouter.HandleFunc("/messages", h.GetMessages).Methods("GET")
-	apiRouter.HandleFunc("/messages", h.CreateMessage).Methods("POST")
-	apiRouter.HandleFunc("/messages/{id}", h.UpdateMessage).Methods("PUT")
-	apiRouter.HandleFunc("/messages/{id}", h.DeleteMessage).Methods("DELETE")
-	apiRouter.HandleFunc("/status/{code}", h.GetHTTPStatus).Methods("GET")
-	apiRouter.HandleFunc("/health", h.HealthCheck).Methods("GET")
+	api.HandleFunc("/messages", h.GetMessages).Methods("GET")
+	api.HandleFunc("/messages", h.CreateMessage).Methods("POST")
+	api.HandleFunc("/messages/{id}", h.UpdateMessage).Methods("PUT")
+	api.HandleFunc("/messages/{id}", h.DeleteMessage).Methods("DELETE")
+	api.HandleFunc("/status/{code}", h.GetHTTPStatus).Methods("GET")
+	api.HandleFunc("/health", h.HealthCheck).Methods("GET")
 
 	return router
 }
 
-// GetMessages handles GET /api/messages
 func (h *Handler) GetMessages(w http.ResponseWriter, r *http.Request) {
-	messages, err := h.storage.GetAll()
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to get messages")
-		return
-	}
-	h.writeJSON(w, http.StatusOK, APIResponse{
+	messages := h.storage.GetAll()
+
+	response := models.APIResponse{
 		Success: true,
 		Data:    messages,
-	})
+	}
+	h.writeJSON(w, http.StatusOK, response)
 }
 
-// CreateMessage handles POST /api/messages
 func (h *Handler) CreateMessage(w http.ResponseWriter, r *http.Request) {
-	var req CreateMessageRequest
+	var req models.CreateMessageRequest
 	if err := h.parseJSON(r, &req); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid request body")
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
-	if req.Content == "" {
-		h.writeError(w, http.StatusBadRequest, "content cannot be empty")
+
+	if err := req.Validate(); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := h.storage.Create(req.Content)
+
+	message, err := h.storage.Create(req.Username, req.Content)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to create message")
+		h.writeError(w, http.StatusInternalServerError, "Failed to create message")
 		return
 	}
-	h.writeJSON(w, http.StatusCreated, APIResponse{
+
+	response := models.APIResponse{
 		Success: true,
 		Data:    message,
-	})
+	}
+	h.writeJSON(w, http.StatusCreated, response)
 }
 
-// UpdateMessage handles PUT /api/messages/{id}
 func (h *Handler) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid message ID")
+		h.writeError(w, http.StatusBadRequest, "Invalid message ID")
 		return
 	}
-	var req UpdateMessageRequest
+
+	var req models.UpdateMessageRequest
 	if err := h.parseJSON(r, &req); err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid request body")
+		h.writeError(w, http.StatusBadRequest, "Invalid JSON")
 		return
 	}
-	if req.Content == "" {
-		h.writeError(w, http.StatusBadRequest, "content cannot be empty")
+
+	if err := req.Validate(); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
 	message, err := h.storage.Update(id, req.Content)
 	if err != nil {
-		if err == storage.ErrNotFound {
-			h.writeError(w, http.StatusNotFound, "message not found")
-			return
-		}
-		h.writeError(w, http.StatusInternalServerError, "failed to update message")
+		h.writeError(w, http.StatusNotFound, "Message not found")
 		return
 	}
-	h.writeJSON(w, http.StatusOK, APIResponse{
+
+	response := models.APIResponse{
 		Success: true,
 		Data:    message,
-	})
+	}
+	h.writeJSON(w, http.StatusOK, response)
 }
 
-// DeleteMessage handles DELETE /api/messages/{id}
 func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid message ID")
+		h.writeError(w, http.StatusBadRequest, "Invalid message ID")
 		return
 	}
+
 	if err := h.storage.Delete(id); err != nil {
-		if err == storage.ErrNotFound {
-			h.writeError(w, http.StatusNotFound, "message not found")
-			return
-		}
-		h.writeError(w, http.StatusInternalServerError, "failed to delete message")
+		h.writeError(w, http.StatusNotFound, "Message not found")
 		return
 	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GetHTTPStatus handles GET /api/status/{code}
 func (h *Handler) GetHTTPStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	code, err := strconv.Atoi(vars["code"])
-	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "invalid status code")
+	if err != nil || code < 100 || code > 599 {
+		h.writeError(w, http.StatusBadRequest, "Invalid status code")
 		return
 	}
-	if code < 100 || code > 599 {
-		h.writeError(w, http.StatusBadRequest, "status code must be between 100-599")
-		return
-	}
-	response := HTTPStatusResponse{
+
+	statusResponse := models.HTTPStatusResponse{
 		StatusCode:  code,
-		ImageURL:    "https://http.cat/" + strconv.Itoa(code),
+		ImageURL:    "http://localhost:8080/api/cat/" + vars["code"],
 		Description: getHTTPStatusDescription(code),
 	}
-	h.writeJSON(w, http.StatusOK, APIResponse{
+
+	response := models.APIResponse{
 		Success: true,
-		Data:    response,
-	})
+		Data:    statusResponse,
+	}
+	h.writeJSON(w, http.StatusOK, response)
 }
 
-// HealthCheck handles GET /api/health
-func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	count, err := h.storage.Count()
+// GetHTTPCatImage handles GET /api/cat/{code}
+func (h *Handler) GetHTTPCatImage(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	code := vars["code"]
+
+	// Proxy request to http.cat
+	resp, err := http.Get("https://http.cat/" + code)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "failed to get message count")
+		http.Error(w, "Failed to fetch image", http.StatusInternalServerError)
 		return
 	}
-	response := HealthResponse{
-		Status:        "ok",
-		Message:       "API is running",
-		Timestamp:     time.Now().UTC(),
-		TotalMessages: count,
+	defer resp.Body.Close()
+
+	// Copy headers
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	origin := r.Header.Get("Origin")
+	if origin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+	} else {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 	}
-	h.writeJSON(w, http.StatusOK, APIResponse{
-		Success: true,
-		Data:    response,
-	})
+	w.WriteHeader(resp.StatusCode)
+
+	// Copy body
+	_, _ = io.Copy(w, resp.Body)
 }
 
-// Helper function to write JSON responses
+func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	healthData := map[string]interface{}{
+		"status":         "healthy",
+		"message":        "API is running",
+		"timestamp":      time.Now(),
+		"total_messages": h.storage.Count(),
+	}
+	h.writeJSON(w, http.StatusOK, healthData)
+}
+
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Printf("failed to write JSON response: %v", err)
+		log.Printf("Error encoding JSON: %v", err)
 	}
 }
 
-// Helper function to write error responses
 func (h *Handler) writeError(w http.ResponseWriter, status int, message string) {
-	h.writeJSON(w, status, APIResponse{
+	response := models.APIResponse{
 		Success: false,
 		Error:   message,
-	})
+	}
+	h.writeJSON(w, status, response)
 }
 
-// Helper function to parse JSON request body
 func (h *Handler) parseJSON(r *http.Request, dst interface{}) error {
-	defer r.Body.Close()
 	return json.NewDecoder(r.Body).Decode(dst)
 }
 
-// Helper function to get HTTP status description
 func getHTTPStatusDescription(code int) string {
 	switch code {
-	case http.StatusOK:
+	case 200:
 		return "OK"
-	case http.StatusCreated:
+	case 201:
 		return "Created"
-	case http.StatusNoContent:
+	case 204:
 		return "No Content"
-	case http.StatusBadRequest:
+	case 400:
 		return "Bad Request"
-	case http.StatusUnauthorized:
+	case 401:
 		return "Unauthorized"
-	case http.StatusForbidden:
-		return "Forbidden"
-	case http.StatusNotFound:
+	case 404:
 		return "Not Found"
-	case http.StatusInternalServerError:
+	case 500:
 		return "Internal Server Error"
 	default:
-		return "Unknown Status"
+		return "Unknown status"
 	}
 }
 
-// CORS middleware
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
