@@ -1,18 +1,46 @@
 package main
 
 import (
-	"lab03-backend/api"
-	"lab03-backend/storage"
 	"log"
 	"net/http"
 	"time"
 )
 
+// Placeholder for storage and handler implementations
+type MemoryStorage struct{}
+
+func NewMemoryStorage() *MemoryStorage {
+	return &MemoryStorage{}
+}
+
+type APIHandler struct {
+	storage *MemoryStorage
+}
+
+func NewAPIHandler(storage *MemoryStorage) *APIHandler {
+	return &APIHandler{storage: storage}
+}
+
+func (h *APIHandler) SetupRoutes() *http.ServeMux {
+	mux := http.NewServeMux()
+	// Add your actual routes here
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Server is running"))
+	})
+	return mux
+}
+
 func main() {
-	storage := storage.NewMemoryStorage()
-	handler := api.NewHandler(storage)
+	// Create a new memory storage instance
+	storage := NewMemoryStorage()
+
+	// Create a new API handler with the storage
+	handler := NewAPIHandler(storage)
+
+	// Setup routes using the handler
 	router := handler.SetupRoutes()
 
+	// Configure server
 	server := &http.Server{
 		Addr:         ":8080",
 		Handler:      router,
@@ -21,8 +49,11 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Println("Server starting on :8080")
+	// Log server start
+	log.Println("Starting server on :8080")
+
+	// Start the server and handle errors
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		log.Fatalf("Server failed: %v", err)
 	}
 }
